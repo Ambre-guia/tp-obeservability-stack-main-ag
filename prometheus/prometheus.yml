@@ -1,0 +1,146 @@
+# ============================================================================
+# PROMETHEUS CONFIGURATION
+# Scrape des métriques depuis les microservices et exporters
+# ============================================================================
+
+global:
+  # Intervalle de scrape par défaut
+  scrape_interval: 15s
+  
+  # Délai avant timeout d'un scrape
+  scrape_timeout: 10s
+  
+  # Intervalle d'évaluation des règles
+  evaluation_interval: 15s
+  
+  # Labels externes ajoutés à toutes les métriques
+  external_labels:
+    cluster: 'observability-stack'
+    environment: 'production'
+
+# Configuration des alertes (optionnel)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Règles d'alerte et d'agrégation (optionnel)
+rule_files:
+  # - "alerts/*.yml"
+  # - "rules/*.yml"
+
+# ============================================================================
+# SCRAPE CONFIGURATIONS
+# ============================================================================
+scrape_configs:
+  
+  # --------------------------------------------------------------------------
+  # Prometheus lui-même
+  # --------------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          type: 'monitoring'
+
+  # --------------------------------------------------------------------------
+  # Frontend Service (Node.js Express)
+  # --------------------------------------------------------------------------
+  - job_name: 'frontend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['frontend:3000']
+        labels:
+          service: 'frontend'
+          type: 'application'
+          language: 'nodejs'
+    
+    # Relabeling pour enrichir les métriques
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: host
+        replacement: '${1}'
+
+  # --------------------------------------------------------------------------
+  # Backend Service (Python Flask)
+  # --------------------------------------------------------------------------
+  - job_name: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['backend:5000']
+        labels:
+          service: 'backend'
+          type: 'application'
+          language: 'python'
+    
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: host
+        replacement: '${1}'
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL Exporter (Métriques base de données)
+  # --------------------------------------------------------------------------
+  - job_name: 'postgres'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+          type: 'database'
+          db_type: 'postgres'
+    
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # --------------------------------------------------------------------------
+  # Elasticsearch Exporter (Métriques Elasticsearch)
+  # --------------------------------------------------------------------------
+  - job_name: 'elasticsearch'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['elasticsearch-exporter:9114']
+        labels:
+          service: 'elasticsearch'
+          type: 'logging'
+
+  # --------------------------------------------------------------------------
+  # Jaeger (Métriques de tracing)
+  # --------------------------------------------------------------------------
+  - job_name: 'jaeger'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['jaeger:14269']
+        labels:
+          service: 'jaeger'
+          type: 'tracing'
+
+# ============================================================================
+# REMOTE WRITE (pour envoyer les métriques vers un stockage distant)
+# ============================================================================
+# remote_write:
+#   - url: 'http://remote-storage:9009/api/v1/push'
+#     queue_config:
+#       max_samples_per_send: 1000
+#       max_shards: 5
+#       capacity: 2500
+
+# ============================================================================
+# REMOTE READ (pour lire depuis un stockage distant)
+# ============================================================================
+# remote_read:
+#   - url: 'http://remote-storage:9009/api/v1/read'
